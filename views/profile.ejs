@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Your Book List</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .star {
+      cursor: pointer;
+      font-size: 1.5rem;
+      color: lightgray;
+    }
+    .star.selected {
+      color: gold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Welcome <%= user.local.email %>!</h1>
+    <a href="/logout">Logout</a>
+
+    <h2>Your Book List</h2>
+    <ul>
+      <% books.forEach(function(book) { %>
+        <li>
+          <strong><%= book.title %></strong> by <%= book.author %><br>
+
+          <% if (book.rating) { %>
+            ⭐️ Rating:
+            <% for (let i = 1; i <= 5; i++) { %>
+              <span class="star <%= i <= book.rating ? 'selected' : '' %>">&#9733;</span>
+            <% } %><br>
+          <% } %>
+
+          <% if (book.read) { %>
+            ✅ <em>Read</em><br>
+            <% if (book.finishedAt) { %>
+              📅 Finished on: <%= new Date(book.finishedAt).toDateString() %><br>
+            <% } %>
+          <% } else { %>
+            <button class="mark-read-btn" data-id="<%= book._id %>">Mark Read</button>
+          <% } %>
+
+          <button class="delete-btn" data-id="<%= book._id %>">Delete</button>
+        </li>
+        <hr>
+      <% }); %>
+    </ul>
+
+    <h3>Add New Book</h3>
+    <form action="/books" method="POST">
+      <input type="text" name="title" placeholder="Book Title" required>
+      <input type="text" name="author" placeholder="Author" required>
+      <br><label>Rate this book (1–5):</label><br>
+      <div id="star-rating">
+        <% for (let i = 1; i <= 5; i++) { %>
+          <span class="star" data-value="<%= i %>">&#9733;</span>
+        <% } %>
+      </div>
+      <input type="hidden" name="rating" id="ratingInput" value="0">
+      <br><button type="submit">Add Book</button>
+    </form>
+  </div>
+
+  <script src="/main.js"></script>
+</body>
+</html>
