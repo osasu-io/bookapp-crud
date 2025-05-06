@@ -1,106 +1,124 @@
-const { ObjectId } = require('mongodb');
-
 module.exports = function(app, passport, db) {
 
-  // Home
-  app.get('/', (req, res) => res.render('index.ejs'));
+// show the home page (login/signup buttons)
+app.get('/', function(req, res) {
+  res.render('index.ejs');
+});
 
-  // Profile
-  app.get('/profile', isLoggedIn, async (req, res) => {
-    try {
-      const books = await db.collection('books').find({ userId: req.user._id }).toArray();
-      res.render('profile.ejs', { user: req.user, books });
-    } catch (err) {
-      console.error(err);
-      res.redirect('/');
+// PROFILE PAGE =========================
+app.get('/profile', isLoggedIn, function(req, res) {
+  // beginner note: this gets all books from the db and sends to profile.ejs
+  db.collection('books').find().toArray((err, result) => {
+    if (err) return console.log(err)
+    res.render('profile.ejs', {
+      user: req.user,
+      books: result // pass books array to front-end
+    })
+  })
+})
+
+// LOGOUT ==============================
+app.get('/logout', function(req, res) {
+  req.logout(() => {
+    console.log('User has logged out!')
+  })
+  res.redirect('/')
+})
+
+// ===== BOOK CRUD ROUTES ==============
+
+// CREATE a new book
+app.post('/books', (req, res) => {
+  db.collection('books').save({
+    title: req.body.title,    // book title from form
+    author: req.body.author,  // author from form
+    read: false               // set to false when added
+  }, (err, result) => {
+    if (err) return console.log(err)
+    console.log('book saved to db')
+    res.redirect('/profile')
+  })
+})
+
+// UPDATE - mark book as read or unread
+app.put('/books', (req, res) => {
+  db.collection('books').findOneAndUpdate(
+    { title: req.body.title, author: req.body.author },
+    {
+      $set: {
+        read: req.body.read === 'false' ? true : false
+      }
+    },
+    {
+      sort: { _id: -1 },
+      upsert: false
+    },
+    (err, result) => {
+      if (err) return res.send(err)
+      res.send(result)
     }
-  });
+  )
+})
 
-  // Logout
-  app.get('/logout', (req, res) => {
-    req.logout(() => res.redirect('/'));
-  });
-
-  // CREATE book
-    app.post('/books', isLoggedIn, async (req, res) => {
-    try {
-      await db.collection('books').insertOne({
-        userId: req.user._id,
-        title: req.body.title,
-        author: req.body.author,
-        rating: parseInt(req.body.rating) || 0,
-        read: false
-      });
-      res.redirect('/profile');
-    } catch (err) {
-      console.error(err);
-      res.redirect('/profile');
+// DELETE a book
+app.delete('/books', (req, res) => {
+  db.collection('books').findOneAndDelete(
+    { title: req.body.title, author: req.body.author },
+    (err, result) => {
+      if (err) return res.send(500, err)
+      res.send('Book deleted')
     }
+  )
+})
+
+// AUTH ROUTES  =========
+
+app.get('/login', function(req, res) {
+  res.render('login.ejs', { message: req.flash('loginMessage') });
+});
+
+app.post('/login', passport.authenticate('local-login', {
+  successRedirect: '/profile',
+  failureRedirect: '/login',
+  failureFlash: true
+}));
+
+app.get('/signup', function(req, res) {
+  res.render('signup.ejs', { message: req.flash('signupMessage') });
+});
+
+        // process the signup form
+        app.post('/signup', passport.authenticate('local-signup', {
+            successRedirect : '/profile', // redirect to the secure profile section
+            failureRedirect : '/signup', // redirect back to the signup page if there is an error
+            failureFlash : true // allow flash messages
+        }));
+
+
+// =============================================================================
+// UNLINK ACCOUNTS =============================================================
+// =============================================================================
+// used to unlink accounts. for social accounts, just remove the token
+// for local account, remove email and password
+// user account will stay active in case they want to reconnect in the future
+
+    // local -----------------------------------
+
+
+app.get('/unlink/local', isLoggedIn, function(req, res) {
+  var user = req.user;
+  user.local.email = undefined;
+  user.local.password = undefined;
+  user.save(function(err) {
+    res.redirect('/profile');
   });
+});
 
-
-  // UPDATE (mark as read)
-    app.put('/books', isLoggedIn, async (req, res) => {
-    try {
-      await db.collection('books').findOneAndUpdate(
-        { _id: new ObjectId(req.body.id) },
-        {
-          $set: {
-            read: true,
-            finishedAt: new Date()
-          }
-        },
-        { returnDocument: 'after' }
-      );
-      res.json('Marked Read');
-    } catch (err) {
-      console.error(err);
-      res.status(500).send(err);
-    }
-  });
-
-
-  // DELETE book
-  app.delete('/books', isLoggedIn, async (req, res) => {
-    try {
-      await db.collection('books').deleteOne({ _id: new ObjectId(req.body.id) });
-      res.json('Deleted');
-    } catch (err) {
-      console.error(err);
-      res.status(500).send(err);
-    }
-  });
-
-  // Auth
-  app.get('/login', (req, res) => res.render('login.ejs', { message: req.flash('loginMessage') }));
-  app.post('/login', passport.authenticate('local-login', {
-    successRedirect: '/profile',
-    failureRedirect: '/login',
-    failureFlash: true
-  }));
-
-  app.get('/signup', (req, res) => res.render('signup.ejs', { message: req.flash('signupMessage') }));
-  app.post('/signup', passport.authenticate('local-signup', {
-    successRedirect: '/profile',
-    failureRedirect: '/signup',
-    failureFlash: true
-  }));
-
-  // Unlink
-  app.get('/unlink/local', isLoggedIn, async (req, res) => {
-    try {
-      req.user.local.email = undefined;
-      req.user.local.password = undefined;
-      await req.user.save();
-      res.redirect('/profile');
-    } catch (err) {
-      console.error(err);
-      res.redirect('/profile');
-    }
-  });
 };
 
+// middleware to make sure user is logged in
 function isLoggedIn(req, res, next) {
-  if (req.isAuthenticated()) return next();
-  res.redirect('/');
+  if (req.isAuthenticated())
+    return next()
+  res.redirect('/')
 }
